@@ -1,0 +1,57 @@
+<?php
+error_reporting(0);
+ini_set('display_errors', 0);
+
+header("Content-Type: application/json");
+
+define('API_URL', "https://draw.ar-lottery01.com/WinGo/WinGo_30SEC/GetHistoryIssuePage.json?ts=" . time());
+define('SAVE_FILE', DIR . "/WinGo_30S.json");
+
+// Load saved history
+$history = [];
+if (file_exists(SAVE_FILE)) {
+    $history = json_decode(file_get_contents(SAVE_FILE), true);
+}
+$savedList = $history['data']['list'] ?? [];
+
+// Fetch live API
+$ch = curl_init(API_URL);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+$apiResponse = curl_exec($ch);
+curl_close($ch);
+
+$apiData = json_decode($apiResponse, true);
+$liveList = $apiData["data"]["list"] ?? [];
+
+// Merge new results
+foreach ($liveList as $item) {
+    $exists = false;
+    foreach ($savedList as $p) {
+        if ($p["issueNumber"] == $item["issueNumber"]) {
+            $exists = true;
+            break;
+        }
+    }
+    if (!$exists) {
+        $savedList[] = $item;
+    }
+}
+
+// Sort DESC
+usort($savedList, function ($a, $b) {
+    return strcmp($b['issueNumber'], $a['issueNumber']);
+});
+
+// Save history
+file_put_contents(SAVE_FILE, json_encode([
+    "total_record" => count($savedList),
+    "data" => ["list" => $savedList]
+], JSON_PRETTY_PRINT));
+
+// Output live data
+echo json_encode([
+    "total_record" => count($savedList),
+    "data" => ["list" => $liveList]
+], JSON_PRETTY_PRINT);
